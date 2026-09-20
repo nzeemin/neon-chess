@@ -1,0 +1,159 @@
+	.TITLE	CHESS
+	.ASECT
+
+SCREEN = 040000
+SCRHEI = 256.
+
+R77716 = 117716				; Fake 177716 register address for CHESS.MAC
+
+	.=1000
+.INCLUDE /CHESS.MAC/
+
+	.=100000
+START::
+	;MTPS	#340			; disable all interrupts
+	CLR	@#177560
+	MOV	SP, OSTACK		; Сохраняем начальное значение SP
+	MOV	#1000, SP		; Установим границу стека
+
+	CALL	CLSCR			; Очищаем экран
+
+	MOVB	#'1, @#<ERRTXT+6>
+	MOV	#AREA, @#177530
+	NOP				;!
+	TST	AREA
+	BMI	ERROR
+
+	MOVB	#'2, @#<ERRTXT+6>
+	MOV	@#<AREA+2>, @#<VIEW+4>
+	MOV	#VIEW, @#177530
+	NOP				;!
+	TST	VIEW
+	BMI	ERROR
+
+	MOVB	#'3, @#<ERRTXT+6>
+	MOV	#18., PALCOM
+	MOV	#PALCOM, @#177530
+	NOP				;!
+
+	MOV	#GAMESC, R1		; Строка приветствия
+	CALL	PRINT
+
+	MOV	#EMTEMU, @#000030	; Устанавливаем обработчик EMT
+
+	CALL	PPRP1			; Настраиваем экран
+
+	;MOVB	#1, PRCW	; звуковой сигнал
+	;MOV	#42000, AS	; адрес буфера экрана
+
+	JMP	@#L23700	; Запускаем игру
+
+ERROR:	MOV	#ERRTXT, @#177566
+	NOP				;!
+FINISH:
+	MOV	OSTACK, SP		; Восстанавливаем стек
+	CLR	R0			; close all files
+	EMT	350			; and exit to RT-11 system
+
+OSTACK:	.WORD	40000			; Начальное значение SP
+
+AREA:	.WORD	46		; Команда ARCRE
+	.WORD	SCREEN		; Window buffer address
+	.WORD	SCRHEI		; YSize
+	.WORD	64.		; XSize
+	.WORD	1+140000	; VM2 + PL3
+VIEW:	.WORD	4		; Команда VWCRE
+	.WORD	0		; View ID
+	.WORD	0		; Area ID
+	.WORD	0,0		; Vert/horz offset
+	.WORD	20.,<20.+SCRHEI-1> ; Top/bottom row
+	.WORD	5.,<5.+17.>	; Left/right columns
+	.BYTE	1,2		; X/Y scale
+PALCOM:	.WORD	15.		; Команда PLCRE
+	.WORD	1+140000	; VM2 + PL3
+	.BYTE	003,000,000,000,003,377,000,377
+	.BYTE	003,000,377,377,003,303,222,377
+	.BYTE	000,000,000,000,000,000,000,000
+	.BYTE	377,377,377,377,377,377,000,377
+
+ERRTXT:	.ASCIZ	/ERROR 0/
+	.EVEN
+
+EXITSC:	; Строка прощания перед выходом
+	.ASCII	/BYE!/
+	.BYTE	0
+	.EVEN
+
+GAMESC:	; Строка приветствия
+	.ASCII	/CHESS /
+.INCLUDE /VERSIO.MAC/
+	.BYTE	0
+	.EVEN
+
+; Подпрограмма: очистка всего экрана
+CLSCR:
+	MOV	#SCREEN, R1
+	MOV	#<16.*SCRHEI>, R5
+1$:	CLR	(R1)+
+	CLR	(R1)+
+	SOB	R5, 1$
+	RETURN
+
+; Подпрограмма: Печать строки: R1 = адрес строки, строка завершается 0; портит R0
+PRINT:
+PR0:	MOVB	(R1)+, R0		; Конец строки?
+	BEQ	PR2			; да => завершаем
+PR1:	TSTB	@#177564		; Источник канала 0 готов?
+	BPL	PR1			; нет => ждём
+	MOV	R0, @#177566		; передаём символ в канал 0
+	BR	PR0
+PR2:	RETURN
+
+; Наш обработчик EMT с эмуляцией терминала БК-0010
+EMTEMU:
+	MOV	R5, -(SP)
+	MOV	2(SP), R5		; адрес возврата
+	MOV	-(R5), R5		; берём код команды EMT
+	BIC	#177400, R5
+	CMP	R5, #30
+	BHIS	1$
+	MOV	EMTTAB(R5), R5
+	JSR	PC, (R5)		; переходим к обработчику
+1$:	MOV	(SP)+, R5
+	RTI
+
+EMTTAB:	.WORD	EMTRET	; 0
+	.WORD	EMTRET	; 2
+	.WORD	EMTRET	; 4 - NOT USED
+	.WORD	MCTKOD	; 6 - чтение кода символа с клавиатуры
+	.WORD	EMTRET	; 10 - NOT USED
+	.WORD	EMTRET	; 12 - NOT USED
+	.WORD	EMTRET	; 14 - NOT USED
+	.WORD	MFSIM	; 16 - формирование символов и переключение режимов
+	.WORD	MFSTR	; 20 - формирование строки символов
+	.WORD	EMTRET	; 22 - NOT USED
+	.WORD	MUSTKK	; 24 - установка курсора по координатам
+	.WORD	MSKK	; 26 - получение координат курсора
+
+EMTRET:	RETURN
+
+EMTHLT:	HALT				;DEBUG
+
+MCTKOD:
+1$:	TSTB	@#177560		; ready?
+	BPL	1$			; no => wait
+	MOVB	@#177562, R0		; get code
+	BIC	#177400, R0		; low byte only
+; Letters lowercase -> uppercase correction
+	CMP	R0, #141		; lowercase?
+	BLO	2$
+	CMP	R0, #172
+	BHI	2$
+	SUB	#40, R0			; to uppercase
+2$:	RETURN
+
+.INCLUDE /BKEMUL.MAC/
+
+STACK::	.BLKW	200			; под стек
+
+	.END	START
