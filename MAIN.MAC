@@ -39,6 +39,7 @@ START::
 	MOV	#GAMESC, R1		; Строка приветствия
 	CALL	PRINT
 
+	MOV	@#000030, OLDEMT	; save old EMT vector
 	MOV	#EMTEMU, @#000030	; Устанавливаем обработчик EMT
 
 	CALL	PPRP1			; Настраиваем экран
@@ -50,12 +51,21 @@ START::
 
 ERROR:	MOV	#ERRTXT, @#177566
 	NOP				;!
+
 FINISH:
 	MOV	OSTACK, SP		; Восстанавливаем стек
+	MOV	OLDEMT, @#000030	; restore old EMT vector
+	MOV	@#<AREA+2>, @#<ARKTAB+2>	; put Area ID into ARKILL args
+	MOV	#ARKTAB, @#177530	; ARKILL - release plane + views
+	NOP				;!
+	MOV	#EXITSC, R1		; print exit message
+	CALL	PRINT
 	CLR	R0			; close all files
 	EMT	350			; and exit to RT-11 system
 
 OSTACK:	.WORD	40000			; Начальное значение SP
+OLDEMT:	.WORD	0			; saved EMT vector
+ARKTAB:	.WORD	2, 0			; ARKILL request code, Area ID
 
 AREA:	.WORD	46		; Команда ARCRE
 	.WORD	SCREEN		; Window buffer address
@@ -79,15 +89,12 @@ PALCOM:	.WORD	15.		; Команда PLCRE
 ERRTXT:	.ASCIZ	/ERROR 0/
 	.EVEN
 
-EXITSC:	; Строка прощания перед выходом
-	.ASCII	/BYE!/
-	.BYTE	0
-	.EVEN
-
 GAMESC:	; Строка приветствия
 	.ASCII	/CHESS /
 .INCLUDE /VERSIO.MAC/
 	.BYTE	0
+EXITSC:	; Строка прощания перед выходом
+	.ASCIZ	<015><012>/BYE!/
 	.EVEN
 
 ; Подпрограмма: очистка всего экрана
@@ -137,7 +144,7 @@ EMTTAB:	.WORD	EMTRET	; 0
 
 EMTRET:	RETURN
 
-EMTHLT:	HALT				;DEBUG
+;EMTHLT:	HALT	;DEBUG
 
 MCTKOD:
 1$:	TSTB	@#177560		; ready?
