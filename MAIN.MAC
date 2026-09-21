@@ -2,14 +2,14 @@
 	.ASECT
 
 SCREEN = 040000
-SCRHEI = 256.
+SCRHEI = 256.+8.
 
 R77716 = 117716				; Fake 177716 register address for CHESS.MAC
 
 	.=1000
 .INCLUDE /CHESS.MAC/
 
-	.=100000
+	.=101000
 START::
 	;MTPS	#340			; disable all interrupts
 	CLR	@#177560
@@ -66,7 +66,7 @@ VIEW:	.WORD	4		; Команда VWCRE
 	.WORD	0		; View ID
 	.WORD	0		; Area ID
 	.WORD	0,0		; Vert/horz offset
-	.WORD	20.,<20.+SCRHEI-1> ; Top/bottom row
+	.WORD	12.,<12.+SCRHEI-1> ; Top/bottom row
 	.WORD	5.,<5.+17.>	; Left/right columns
 	.BYTE	1,2		; X/Y scale
 PALCOM:	.WORD	15.		; Команда PLCRE
